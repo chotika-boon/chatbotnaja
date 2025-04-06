@@ -1,64 +1,37 @@
-import pathlib
-import textwrap
-import pandas as pd
-import streamlit as st
-import google.generativeai as genai
+# Add a file uploader for CSV data
+st.subheader("Upload CSV for Analysis")
+uploaded_file = st.file_uploader("Choose a CSV file", type=["csv"])
+if uploaded_file is not None: try:
+# Load the uploaded CSV file
+st.session_state.uploaded_data = pd.read_csv(uploaded_file) st.success("File successfully uploaded and read.")
+# Display the content of the CSV
+st.write("### Uploaded Data Preview") st.dataframe(st.session_state.uploaded_data.head())
+except Exception as e:
+st.error(f"An error occurred while reading the file: {e}")
 
-# ---------------- Setup ----------------
-genai.configure(api_key=st.secrets['gemini_api_key'])
-model = genai.GenerativeModel('gemini-1.5-pro')
-model1 = genai.GenerativeModel('gemini-1.5-pro')  # For explanation + persona
+# Capture user input and generate bot response
+if user_input := st.chat_input("Type your message here..."):
+# Store and display user message st.session_state.chat_history.append(("user", user_input)) st.chat_message("user").markdown(user_input)
+# Determine if user input is a request for data analysis and the checkbox is selected if model:
+try:
+if st.session_state.uploaded_data is not None and analyze_data_checkbox:
+# Check if user requested data analysis or insights
+if "analyze" in user_input.lower() or "insight" in user_input.lower():
+# Create a description of the data for the AI model
+data_description = st.session_state.uploaded_data.describe().to_string()
+prompt = f"Analyze the following dataset and provide insights:\n\n{data_description}"
+# Generate AI response for the data analysis response = model.generate_content(prompt) bot_response = response.text
+# Store and display the AI-generated analysis st.session_state.chat_history.append(("assistant", bot_response)) st.chat_message("assistant").markdown(bot_response)
+else:
+# Normal conversation with the bot
+response = model.generate_content(user_input) bot_response = response.text
+# Store and display the bot response st.session_state.chat_history.append(("assistant", bot_response)) st.chat_message("assistant").markdown(bot_response)
+elif not analyze_data_checkbox:
+# Respond that analysis is not enabled if the checkbox is not selected
+bot_response = "Data analysis is disabled. Please select the 'Analyze CSV Data with AI' checkbox to enable analysis."
 
-# ---------------- Load Data ----------------
-df_name = "transaction_df"
-transaction_df = pd.read_csv('transactions.csv')
-example_record = transaction_df.head(2).to_string()
-
-data_dict_df = pd.read_csv('data_dict.csv')
-data_dict_text = '\n'.join(
-    '- ' + row['column_name'] + ': ' + row['data_type'] + '. ' + row['description']
-    for _, row in data_dict_df.iterrows()
-)
-
-# ---------------- Streamlit UI ----------------
-st.title("📊 Ask Me About Your Data")
-
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-
-user_input = st.chat_input("Ask me a data question...")
-
-if user_input:
-    question = user_input
-    st.chat_message("user").markdown(question)
-
-    # -------- Prompt for Code Generation --------
-    prompt = f"""
-You are a helpful Python code generator.
-Your goal is to write Python code snippets based on the user's question and the provided DataFrame information.
-
-**User Question:**
-{question}
-
-**DataFrame Name:** {df_name}
-
-**DataFrame Details:**
-{data_dict_text}
-
-**Sample Data (Top 2 Rows):**
-{example_record}
-
-**Instructions:**
-1. Write Python code that answers the user's question.
-2. Use `exec()` to execute the code.
-3. Do NOT import pandas.
-4. Convert the date column to datetime.
-5. Store the result in a variable called `ANSWER`.
-6. Assume the DataFrame is already loaded as `{df_name}`.
-7. Keep the code concise and focused on answering the question.
-
-**Example:**
-For question: "Show me the rows where 'age' > 30", generate:
-```python
-query_result = {df_name}[{df_name}['age'] > 30]
-"""
+st.session_state.chat_history.append(("assistant", bot_response))
+st.chat_message("assistant").markdown(bot_response) else:
+# Respond with a message to upload a CSV file if not yet done bot_response = "Please upload a CSV file first, then ask me to analyze it." st.session_state.chat_history.append(("assistant", bot_response)) st.chat_message("assistant").markdown(bot_response)
+except Exception as e:
+st.error(f"An error occurred while generating the response: {e}")
