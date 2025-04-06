@@ -1,13 +1,14 @@
 # Add a file uploader for CSV data
 st.subheader("Upload CSV for Analysis")
 uploaded_file = st.file_uploader("Choose a CSV file", type=["csv"])
-if uploaded_file is not None: try:
+if uploaded_file is not None:
+  try:
 # Load the uploaded CSV file
-st.session_state.uploaded_data = pd.read_csv(uploaded_file) st.success("File successfully uploaded and read.")
+  st.session_state.uploaded_data = pd.read_csv(uploaded_file) st.success("File successfully uploaded and read.")
 # Display the content of the CSV
-st.write("### Uploaded Data Preview") st.dataframe(st.session_state.uploaded_data.head())
+  st.write("### Uploaded Data Preview") st.dataframe(st.session_state.uploaded_data.head())
 except Exception as e:
-st.error(f"An error occurred while reading the file: {e}")
+  st.error(f"An error occurred while reading the file: {e}")
 
 # Capture user input and generate bot response
 if user_input := st.chat_input("Type your message here..."):
