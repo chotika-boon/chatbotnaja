@@ -61,3 +61,4 @@ Your goal is to write Python code snippets based on the user's question and the 
 For question: "Show me the rows where 'age' > 30", generate:
 ```python
 query_result = {df_name}[{df_name}['age'] > 30]
+"""
