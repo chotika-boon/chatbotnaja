@@ -1,16 +1,16 @@
-import streamlit as st
-import google.generativeai as genai
+import pathlib
+import textwrap
+import google.generativeai as genai 
 import pandas as pd
+from IPython.display import display 
+from IPython.display import Markdown
 
 # ---------------- Setup ----------------
 genai.configure(api_key=st.secrets['gemini_api_key'])
 model = genai.GenerativeModel('gemini-1.5-pro')  # ใช้รุ่นที่รองรับ context ยาว
 
 # ---------------- Load Data ----------------
-@st.cache_data
-def load_data():
-    df = pd.read_csv("your_transaction_file.csv")  # 👈 เปลี่ยนเป็นชื่อไฟล์ของคุณ
-    return df
+transaction_df = pd.read_csv('/transactions.csv')
 
 df = load_data()
 df_name = "transaction_df"
