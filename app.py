@@ -39,7 +39,13 @@ if uploaded_file is not None:
     if use_custom_code:
         custom_code = st.text_area(
             "✍️ Enter your custom Python code here (use variable `df`, assign result to `ANSWER`):",
-            value="ANSWER = df.head()", height=200
+            value="""
+# Convert date column to datetime if needed
+df['date'] = pd.to_datetime(df['date'])
+# Sum sales in Jan 2025
+ANSWER = df[df['date'].dt.strftime('%Y-%m') == '2025-01']['sale_dollars'].sum()
+""",
+            height=200
         )
 
     # ----------------------------
@@ -47,8 +53,8 @@ if uploaded_file is not None:
     # ----------------------------
     if question or (use_custom_code and custom_code.strip()):
         df_name = "df"
-        data_dict_text = str(dict(df.dtypes))
-        example_record = df.head(2).to_dict()
+        data_dict_text = str(dict(df.dtypes.astype(str).to_dict()))
+        example_record = df.head(1).to_dict()
 
         if not use_custom_code:
             # ----------------------------
@@ -66,18 +72,14 @@ Here's the context:
 {df_name}
 **DataFrame Details:**
 {data_dict_text}
-**Sample Data (Top 2 Rows):**
+**Sample Data (Top 1 Row):**
 {example_record}
 
 **Instructions:**
 1. Write Python code that addresses the user's question by querying or manipulating the DataFrame.
-2. **Crucially, use the `exec()` function to execute the generated code.**
-3. Do not import pandas
-4. Change date column type to datetime if needed
-5. **Store the result of the executed code in a variable named `ANSWER`.**
-6. Assume the DataFrame is already loaded into a pandas DataFrame object named `{df_name}`.
-7. Keep the generated code concise and focused on answering the question.
-8. If the question requires a specific output format (e.g., a list, a single value), ensure the `ANSWER` variable holds that format.
+2. Do not import pandas.
+3. Use variable `df` as the dataframe.
+4. Store the result in a variable named `ANSWER`.
 """
 
             with st.spinner("🧠 Generating Python code from Gemini..."):
@@ -93,7 +95,8 @@ Here's the context:
         st.code(generated_code, language="python")
 
         try:
-            local_vars = {"df": df}
+            # 👇 ให้ pd พร้อมใช้งานใน exec
+            local_vars = {"df": df, "pd": pd}
             exec(generated_code, {}, local_vars)
             ANSWER = local_vars.get("ANSWER", "No ANSWER variable defined.")
             st.success("✅ Code executed successfully!")
