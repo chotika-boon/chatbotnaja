@@ -2,52 +2,123 @@ import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 
-# ตั้งชื่อแอป
-st.set_page_config(page_title="Gemini Chat + CSV Upload", layout="wide")
-st.title("🤖 Gemini Chat with CSV Upload")
+# ----------------------------
+# CONFIG
+# ----------------------------
+st.set_page_config(page_title="Gemini Data Assistant", layout="wide")
+st.title("🤖 Gemini Data Assistant + 📊 CSV Interpreter")
 
-# อัปโหลดไฟล์ CSV
-st.header("📂 Upload Your CSV File")
-try:
-    uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+# ----------------------------
+# API KEY SETUP
+# ----------------------------
+genai.configure(api_key=st.secrets["gemini_api_key"])
+model = genai.GenerativeModel("gemini-1.5-pro")  # หรือใช้ "gemini-2.0-flash-lite"
 
-    if uploaded_file is not None:
-        st.session_state.uploaded_data = pd.read_csv(uploaded_file)
-        st.success("✅ File successfully uploaded and read.")
-        st.dataframe(st.session_state.uploaded_data.head())
-except Exception as e:
-    st.error(f"❌ Error while uploading file: {e}")
+# ----------------------------
+# UPLOAD CSV
+# ----------------------------
+st.header("📂 Step 1: Upload Your CSV File")
+uploaded_file = st.file_uploader("Upload a CSV file", type="csv")
 
-st.markdown("---")
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file)
+    st.session_state.df = df
+    st.success("✅ File uploaded successfully!")
+    st.dataframe(df.head())
 
-# แชทกับ Gemini
-st.header("💬 Chat with Gemini")
+    # ----------------------------
+    # ASK QUESTION OR WRITE CODE
+    # ----------------------------
+    st.markdown("---")
+    st.header("❓ Step 2: Ask a Question or Write Python Code")
+    question = st.text_input("🔎 Ask your question (e.g. What is the total sale in January 2025?)")
 
-try:
-    # โหลด API Key จาก secrets
-    key = st.secrets["gemini_api_key"]
-    genai.configure(api_key=key)
-    model = genai.GenerativeModel("gemini-2.0-flash-lite")
+    use_custom_code = st.checkbox("🛠️ I want to write my own Python code instead of letting Gemini generate it")
 
-    # เริ่มแชทใหม่หากยังไม่มีใน session
-    if "chat" not in st.session_state:
-        st.session_state.chat = model.start_chat(history=[])
+    custom_code = ""
+    if use_custom_code:
+        custom_code = st.text_area(
+            "✍️ Enter your custom Python code here (use variable `df`, assign result to `ANSWER`):",
+            value="ANSWER = df.head()", height=200
+        )
 
-    def role_to_streamlit(role: str) -> str:
-        return "assistant" if role == "model" else role
+    # ----------------------------
+    # PROCESS
+    # ----------------------------
+    if question or (use_custom_code and custom_code.strip()):
+        df_name = "df"
+        data_dict_text = str(dict(df.dtypes))
+        example_record = df.head(2).to_dict()
 
-    # แสดงประวัติการแชท
-    for message in st.session_state.chat.history:
-        with st.chat_message(role_to_streamlit(message.role)):
-            for part in message.parts:
-                st.markdown(part.text)
+        if not use_custom_code:
+            # ----------------------------
+            # GEMINI: GENERATE PYTHON CODE
+            # ----------------------------
+            prompt = f"""
+You are a helpful Python code generator.
+Your goal is to write Python code snippets based on the user's question
+and the provided DataFrame information.
 
-    # รับ prompt จากผู้ใช้
-    if prompt := st.chat_input("Type your message here..."):
-        st.chat_message("user").markdown(prompt)
-        response = st.session_state.chat.send_message(prompt)
-        with st.chat_message("assistant"):
-            st.markdown(response.text)
+Here's the context:
+**User Question:**
+{question}
+**DataFrame Name:**
+{df_name}
+**DataFrame Details:**
+{data_dict_text}
+**Sample Data (Top 2 Rows):**
+{example_record}
 
-except Exception as e:
-    st.error(f"❌ An error occurred while using Gemini: {e}")
+**Instructions:**
+1. Write Python code that addresses the user's question by querying or manipulating the DataFrame.
+2. **Crucially, use the `exec()` function to execute the generated code.**
+3. Do not import pandas
+4. Change date column type to datetime if needed
+5. **Store the result of the executed code in a variable named `ANSWER`.**
+6. Assume the DataFrame is already loaded into a pandas DataFrame object named `{df_name}`.
+7. Keep the generated code concise and focused on answering the question.
+8. If the question requires a specific output format (e.g., a list, a single value), ensure the `ANSWER` variable holds that format.
+"""
+
+            with st.spinner("🧠 Generating Python code from Gemini..."):
+                response = model.generate_content(prompt)
+                generated_code = response.text.replace("```python", "").replace("```", "").strip()
+        else:
+            generated_code = custom_code
+
+        # ----------------------------
+        # EXECUTE CODE
+        # ----------------------------
+        st.subheader("🧪 Step 3: Generated or Custom Code")
+        st.code(generated_code, language="python")
+
+        try:
+            local_vars = {"df": df}
+            exec(generated_code, {}, local_vars)
+            ANSWER = local_vars.get("ANSWER", "No ANSWER variable defined.")
+            st.success("✅ Code executed successfully!")
+
+            # ----------------------------
+            # SHOW RESULT
+            # ----------------------------
+            st.subheader("📈 Step 4: Result")
+            st.write(ANSWER)
+
+            # ----------------------------
+            # EXPLAIN RESULT
+            # ----------------------------
+            explain_prompt = f'''
+The user asked: {question}
+Here is the result: {ANSWER}
+
+Please answer the question, summarize the result,
+and optionally provide insights about the data or customer behavior.
+'''
+
+            with st.spinner("📋 Summarizing with Gemini..."):
+                explanation = model.generate_content(explain_prompt)
+                st.subheader("🧠 Gemini Explanation")
+                st.markdown(explanation.text)
+
+        except Exception as e:
+            st.error(f"❌ Error while executing code: {e}")
