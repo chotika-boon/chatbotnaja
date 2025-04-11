@@ -1,38 +1,53 @@
-# Add a file uploader for CSV data
-st.subheader("Upload CSV for Analysis")
-uploaded_file = st.file_uploader("Choose a CSV file", type=["csv"])
-if uploaded_file is not None:
-  try:
-# Load the uploaded CSV file
-  st.session_state.uploaded_data = pd.read_csv(uploaded_file) st.success("File successfully uploaded and read.")
-# Display the content of the CSV
-  st.write("### Uploaded Data Preview") st.dataframe(st.session_state.uploaded_data.head())
-except Exception as e:
-  st.error(f"An error occurred while reading the file: {e}")
+import streamlit as st
+import pandas as pd
+import google.generativeai as genai
 
-# Capture user input and generate bot response
-if user_input := st.chat_input("Type your message here..."):
-# Store and display user message st.session_state.chat_history.append(("user", user_input)) st.chat_message("user").markdown(user_input)
-# Determine if user input is a request for data analysis and the checkbox is selected if model:
+# ตั้งชื่อแอป
+st.set_page_config(page_title="Gemini Chat + CSV Upload", layout="wide")
+st.title("🤖 Gemini Chat with CSV Upload")
+
+# อัปโหลดไฟล์ CSV
+st.header("📂 Upload Your CSV File")
 try:
-if st.session_state.uploaded_data is not None and analyze_data_checkbox:
-# Check if user requested data analysis or insights
-if "analyze" in user_input.lower() or "insight" in user_input.lower():
-# Create a description of the data for the AI model
-data_description = st.session_state.uploaded_data.describe().to_string()
-prompt = f"Analyze the following dataset and provide insights:\n\n{data_description}"
-# Generate AI response for the data analysis response = model.generate_content(prompt) bot_response = response.text
-# Store and display the AI-generated analysis st.session_state.chat_history.append(("assistant", bot_response)) st.chat_message("assistant").markdown(bot_response)
-else:
-# Normal conversation with the bot
-response = model.generate_content(user_input) bot_response = response.text
-# Store and display the bot response st.session_state.chat_history.append(("assistant", bot_response)) st.chat_message("assistant").markdown(bot_response)
-elif not analyze_data_checkbox:
-# Respond that analysis is not enabled if the checkbox is not selected
-bot_response = "Data analysis is disabled. Please select the 'Analyze CSV Data with AI' checkbox to enable analysis."
+    uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
 
-st.session_state.chat_history.append(("assistant", bot_response))
-st.chat_message("assistant").markdown(bot_response) else:
-# Respond with a message to upload a CSV file if not yet done bot_response = "Please upload a CSV file first, then ask me to analyze it." st.session_state.chat_history.append(("assistant", bot_response)) st.chat_message("assistant").markdown(bot_response)
+    if uploaded_file is not None:
+        st.session_state.uploaded_data = pd.read_csv(uploaded_file)
+        st.success("✅ File successfully uploaded and read.")
+        st.dataframe(st.session_state.uploaded_data.head())
 except Exception as e:
-st.error(f"An error occurred while generating the response: {e}")
+    st.error(f"❌ Error while uploading file: {e}")
+
+st.markdown("---")
+
+# แชทกับ Gemini
+st.header("💬 Chat with Gemini")
+
+try:
+    # โหลด API Key จาก secrets
+    key = st.secrets["gemini_api_key"]
+    genai.configure(api_key=key)
+    model = genai.GenerativeModel("gemini-2.0-flash-lite")
+
+    # เริ่มแชทใหม่หากยังไม่มีใน session
+    if "chat" not in st.session_state:
+        st.session_state.chat = model.start_chat(history=[])
+
+    def role_to_streamlit(role: str) -> str:
+        return "assistant" if role == "model" else role
+
+    # แสดงประวัติการแชท
+    for message in st.session_state.chat.history:
+        with st.chat_message(role_to_streamlit(message.role)):
+            for part in message.parts:
+                st.markdown(part.text)
+
+    # รับ prompt จากผู้ใช้
+    if prompt := st.chat_input("Type your message here..."):
+        st.chat_message("user").markdown(prompt)
+        response = st.session_state.chat.send_message(prompt)
+        with st.chat_message("assistant"):
+            st.markdown(response.text)
+
+except Exception as e:
+    st.error(f"❌ An error occurred while using Gemini: {e}")
